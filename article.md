@@ -5,12 +5,17 @@ It is very enjoyable to code in and I really like its domain modelling capabilit
 You can use it for fullstack development and easily share code between the front and back end.
 Lets take a look at Fable remoting, a really interesting way of doing this.
 
+This is how Fable remoting is described on its [github page](https://github.com/Zaid-Ajaj/Fable.Remoting).
+>[...] it abstracts away Http and Json and lets you think of your client-server interactions only in terms of pure stateless functions that are statically checked at compile-time
+
+Basicly what this means is that you don´t have to deal with HTTP calls, serializing or deserializing models, you just have to deal with functions.
+
 I will assume some familiarity with F# and MVU. I will, however, add some great F# resources at the bottom of this article.
 
-We will scaffold the project with [Safe-Stack](https://safe-stack.github.io/).
+We will scaffold the project with [SAFE-Stack](https://safe-stack.github.io/).
 This will give us a fullstack project that has a nice and simple todo list set up with fable remoting, this todo list is what we will be editing.
 
-Safe-stack sets us up with a file, `shared.fs`, where the code shared between client and server lives. Lets take a look at it.
+Our project has an assortment of files. One of them `shared.fs` is where the code shared between client and server lives. Lets take a look at it.
 
 The very first thing in this file is the record defining our todo type. 
 ```fsharp
@@ -20,7 +25,6 @@ type Todo =
 ```
 Nice and simple! We also have a module that lets us validate and create our todos.
 
-
 Then there's the following, which is used to create the routes that Fable remoting will be using to perform requests for us.
 ```fsharp
 module Route =
@@ -28,11 +32,11 @@ module Route =
         sprintf "/api/%s/%s" typeName methodName
 ```
 
-And finally the interface defining our routes.
+And finally the interface defining our API.
 ```fsharp
-type ITodosApi =
-    { getTodos : unit -> Async
-      addTodo : Todo -> Async }
+Type ITodosApi =
+    { getTodos : unit -> Async<Todo list>
+      addTodo : Todo -> Async<Todo> }
 ```
 
 As you can see the todo list supports two operations already.
@@ -53,14 +57,14 @@ let todosApi =
 This creates the API so it is ready for the client to use.
 We can see the first example of how to use it in the `init` function.
 ```fsharp
-1: let init(): Model * Cmd<Msg> =
-2:   let model =
-3:        { Todos = []
-4:          Input = "" }
-5:    let cmd = Cmd.OfAsync.perform todosApi.getTodos () GotTodos
-6:    model, cmd
+let init(): Model * Cmd<Msg> =
+  let model =
+       { Todos = []
+         Input = "" }
+   let cmd = Cmd.OfAsync.perform todosApi.getTodos () GotTodos
+   model, cmd
 ```
-This sets up the MVU model and on line 5 the client asks for all the todos.
+This sets up the MVU model and asks the backend for all the todos.
 Once this async function resolves the `GotTodos` command is executed.
 
 Performing requests with Fable remoting is that easy!
@@ -71,7 +75,7 @@ Time to look at the backend.
 
 ### Backend
 
-The server needs to implement the interface defined in the shared file.
+The server needs to implement the API-interface defined in the shared file.
 And we can find that implementation in `Server.fs`
 
 ```fsharp
@@ -88,6 +92,12 @@ let todosApi =
 This is an implementation of the interface defined in the shared file.
 In this example all the functions are declared within the type, but they could just as well be separate as long as they match the interface.
 
+So before we head on lets do a quick recap:
+- We saw the model defining our todos - this is what we will send backwards and forwards in our app.
+- There is a function that creates and handles the routes for us
+- Explored the interface defining what functions we can use to interact with the server
+- Saw the interace implementation on the server!
+
 Cool! Now that we are all caught up lets start editing this API and expanding it a little bit.
 Here we go... Lets delete a todo!
 
@@ -103,7 +113,8 @@ type ITodosApi =
 Our interface now supports deletion!
 All the functions we define in this interface have to return an async and we want to know if the delete succeeded. So we return the `guid` of the deleted todo item if it succeeds.
 
-We also have to add this function to the server so we can edit the storage class.
+In order to make the backend delete todos we need to edit the storage class SAFE Stack provided for us. 
+So we add this function right here. For more context on this class feel free to checkout the [code]() on github.
 ```fsharp
 member __.DeleteTodo (id: Guid) =
     let toDelete = todos.Find(fun x -> x.Id = id)
@@ -162,9 +173,9 @@ We now have 2 new commands to implement in the `update` function. They look like
     { model with Todos = todosAfterRemove }, Cmd.none
 ```
 
-Again we use the endpoint using the same pattern. We call the function, and when it resolves, perform a command.
+Again we use the endpoint with the same pattern. We call the function, and when it resolves, perform a command.
 
-Finally we need to have some way of actually deleting from the view.
+Finally we need to have some way of actually calling this function and deleting it from the view.
 
 In the `containerBox` function we list each todo and we want to add a button there.
 Lets also add some inline styling (you might want to look away).
@@ -175,7 +186,8 @@ for todo in model.Todos do
             li [] [ str todo.Description ]
             Button.button [
                 Button.Color IsDanger
-                Button.Size IsSmall
+                Button.Size IsSmall 
+                // This is where we delete
                 Button.OnClick (fun _ -> DeleteTodo todo.Id |> dispatch)
             ] [ str "X"  ]
         ]
@@ -212,12 +224,20 @@ let todosApiDocs =
 ```
 ![Docs demo](docs.gif)
 
+### And thats it!
+
+Let do a quick recap of what we did:
+- Scaffolded a project with SAFE stack. This gave us a project with a client and server.
+- We added a function definition to the API interface.
+- Added an implementation of said interface on our backend.
+- Added a button that called our new function on the frontend.
+- At no point did we create any extra create or write models, we just used the one domain model we defined.
 
 While being a simple example of using Fable remoting. I think it is clear to see how you can communicate between client and server without having to worry about serialization, deserialization, misspelling your path name - or anything like that!
 It is simply defining and implementing a common interface and calling those functions, oh and did I mention that its all type safe?
 You can just focus on your domain models and doman logic.
 I find it really neat!
-Hopefully you found it interesting too and you want to explore it further.
+Hopefully you found it interesting too!
 
 Check the source code for this [github](https://github.com/Bjorn-Strom/Holiday)
 
