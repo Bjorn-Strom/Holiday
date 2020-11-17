@@ -10,7 +10,7 @@ This is how Fable remoting is described on its [github page](https://github.com/
 
 Basicly what this means is that you don´t have to deal with HTTP calls, serializing or deserializing models, you just have to deal with functions.
 
-I will assume some familiarity with F# and MVU. I will, however, add some great F# resources at the bottom of this article.
+I will assume some familiarity with F# and model-view-update (the Elm architecture). I will, however, add some great F# resources at the bottom of this article.
 
 We will scaffold the project with [SAFE-Stack](https://safe-stack.github.io/).
 This will give us a fullstack project that has a nice and simple todo list set up with fable remoting, this todo list is what we will be editing.
@@ -19,6 +19,7 @@ Our project has an assortment of files. One of them `shared.fs` is where the cod
 
 The very first thing in this file is the record defining our todo type. 
 ```fsharp
+// shared.fs
 type Todo =
     { Id : Guid
       Description : string }
@@ -27,6 +28,7 @@ Nice and simple! We also have a module that lets us validate and create our todo
 
 Then there's the following, which is used to create the routes that Fable remoting will be using to perform requests for us.
 ```fsharp
+// shared.fs
 module Route =
     let builder typeName methodName =
         sprintf "/api/%s/%s" typeName methodName
@@ -34,6 +36,7 @@ module Route =
 
 And finally the interface defining our API.
 ```fsharp
+// shared.fs
 Type ITodosApi =
     { getTodos : unit -> Async<Todo list>
       addTodo : Todo -> Async<Todo> }
@@ -49,6 +52,7 @@ Now lets take a look at how the frontend uses this.
 
 In `Index.fs` we have a todo API:
 ```fsharp
+// index.fs
 let todosApi =
     Remoting.createApi()
     |> Remoting.withRouteBuilder Route.builder
@@ -57,6 +61,7 @@ let todosApi =
 This creates the API so it is ready for the client to use.
 We can see the first example of how to use it in the `init` function.
 ```fsharp
+// index.fs
 let init(): Model * Cmd<Msg> =
   let model =
        { Todos = []
@@ -65,11 +70,12 @@ let init(): Model * Cmd<Msg> =
    model, cmd
 ```
 This sets up the MVU model and asks the backend for all the todos.
-Once this async function resolves the `GotTodos` command is executed.
+Once this async function is resolved the `GotTodos` command is executed. 
+In `GotTodos` is also where the todos gets stored in our model.
 
 Performing requests with Fable remoting is that easy!
 No strings, no serialization, no deserialization, none of that boring stuff!
-Its just a function call and it is all type safe!
+It's just a function call and it is all type safe!
 
 Time to look at the backend.
 
@@ -79,6 +85,7 @@ The server needs to implement the API-interface defined in the shared file.
 And we can find that implementation in `Server.fs`
 
 ```fsharp
+// server.fs
 let todosApi =
     { getTodos = fun () -> async { return storage.GetTodos() }
       addTodo =
@@ -105,6 +112,7 @@ Here we go... Lets delete a todo!
 
 Lets start by adding a function to the interface in `Shared.fs`.
 ```fsharp
+// shared.fs
 type ITodosApi =
     { getTodos : unit -> Async<Todo list>
       addTodo : Todo -> Async<Todo>
@@ -116,6 +124,7 @@ All the functions we define in this interface have to return an async and we wan
 In order to make the backend delete todos we need to edit the storage class SAFE Stack provided for us. 
 So we add this function right here. For more context on this class feel free to checkout the [code]() on github.
 ```fsharp
+// shared.fs
 member __.DeleteTodo (id: Guid) =
     let toDelete = todos.Find(fun x -> x.Id = id)
     let deletedTodo = todos.Remove(toDelete)
@@ -132,6 +141,7 @@ The only thing missing from having a finished API is implementing the delete fun
 All it has to do is call the call the delete method on the storage class.
 In reality this could be editing a database or whatever else you fancy.
 ```fsharp
+// shared
 let todosApi =
     { getTodos = fun () -> async { return storage.GetTodos() }
       addTodo =
@@ -154,6 +164,7 @@ Now we need to reflect these changes in the frontend.
 We need some new commands so we can call our function and delete a todo from the list.
 In `Index.fs` we change the `Msg` type
 ```fsharp
+// index
 type Msg =
     | GotTodos of Todo list
     | SetInput of string
@@ -165,6 +176,7 @@ type Msg =
 
 We now have 2 new commands to implement in the `update` function. They look like this.
 ```fsharp
+// index.fs
 | DeleteTodo id ->
     let cmd = Cmd.OfAsync.perform todosApi.deleteTodo id DeletedTodo
     model, cmd
@@ -180,6 +192,7 @@ Finally we need to have some way of actually calling this function and deleting 
 In the `containerBox` function we list each todo and we want to add a button there.
 Lets also add some inline styling (you might want to look away).
 ```fsharp
+// index.fs
 for todo in model.Todos do
     div [ Style [ Display DisplayOptions.Flex; Custom("justify-content", "space-between"); MarginBottom 10 ] ]
         [
@@ -205,6 +218,7 @@ It is important to keep in mind that under the hood this is just normal HTTP req
 Finally another pretty cool thing we can do is document our api and get a nice overview of it - kind of like swagger.
 The following is a really simple documentation that can be accessed at `localhost:8085/api/todos/docs`
 ```
+// server.fs
 let docs = Docs.createFor<ITodosApi>()
 let todosApiDocs =
     Remoting.documentation "Todos Api"
